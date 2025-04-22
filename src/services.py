@@ -2,37 +2,35 @@ import json
 import datetime
 import logging
 from typing import List, Dict, Any
-from functools import reduce
 
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
 
 
 def cashback_categories_analysis(
-    data: List[Dict[str, Any]], year: int, month: int
+        data: List[Dict[str, Any]], year: int, month: int
 ) -> str:
     """
     Анализирует, сколько кешбэка можно получить по каждой категории
     за указанный месяц и год.
     """
     try:
-        # Фильтрация по дате
-        filtered = filter(
-            lambda x: (
-                datetime.datetime.strptime(x['Дата операции'], '%Y-%m-%d').year == year and
-                datetime.datetime.strptime(x['Дата операции'], '%Y-%m-%d').month == month
-            ),
-            data
-        )
-        # Группировка и подсчет кешбэка по категориям (1% от суммы)
-        result = {}
-        for tx in filtered:
-            category = tx['Категория']
-            cashback = abs(tx['Сумма операции']) * 0.01
-            result[category] = result.get(category, 0) + cashback
-        # Округление до целых рублей
-        result = {k: round(v) for k, v in result.items()}
-        logging.info(f"Кешбэк по категориям за {year}-{month:02}: {result}")
-        return json.dumps(result, ensure_ascii=False)
+        result: Dict[str, float] = {}  # Явная аннотация типа
+        for tx in data:
+            try:
+                dt = datetime.datetime.strptime(tx['Дата операции'], '%Y-%m-%d')
+            except (ValueError, KeyError):
+                logging.warning(f"Пропущена транзакция с некорректной датой: {tx}")
+                continue
+            if dt.year == year and dt.month == month:
+                category = tx.get('Категория', 'Неизвестно')
+                amount = tx.get('Сумма операции', 0)
+                cashback = abs(amount) * 0.01
+                result[category] = result.get(category, 0) + cashback
+
+        # Округляем до целых рублей
+        result_rounded: Dict[str, int] = {k: round(v) for k, v in result.items()}
+        logging.info(f"Кешбэк по категориям за {year}-{month:02}: {result_rounded}")
+        return json.dumps(result_rounded, ensure_ascii=False)
     except Exception as e:
         logging.error(f"Ошибка анализа категорий кешбэка: {e}")
         return json.dumps({})
@@ -46,25 +44,25 @@ def investment_bank(
     за указанный месяц при заданном лимите округления.
     """
     try:
-        # Фильтрация по месяцу и только по расходам (отрицательные суммы)
-        filtered = filter(
-            lambda x: x['Дата операции'].startswith(month) and x['Сумма операции'] < 0,
-            transactions
-        )
-        # Вычисление накоплений через map и reduce
-        def round_up(amount: float, limit: int) -> float:
-            """Округлить сумму вверх до ближайшего limit."""
-            return (int(-amount // limit) + (1 if -amount % limit else 0)) * limit
+        if limit <= 0:
+            logging.warning("Предел округления должен быть положительным числом.")
+            return json.dumps({"invested": 0.0}, ensure_ascii=False)
 
-        savings = list(
-            map(
-                lambda tx: round_up(tx['Сумма операции'], limit) + tx['Сумма операции'],
-                filtered
-            )
-        )
-        total = round(reduce(lambda x, y: x + y, savings, 0), 2)
+        def round_up(amount: float, limit: int) -> float:
+            # Округляет отрицательную сумму расходов вверх до ближайшего лимита
+            remainder = (-amount) % limit
+            to_add = limit - remainder if remainder != 0 else 0
+            return to_add
+
+        filtered = [
+            tx for tx in transactions
+            if tx.get('Дата операции', '').startswith(month) and tx.get('Сумма операции', 0) < 0
+        ]
+
+        savings = [round_up(tx['Сумма операции'], limit) for tx in filtered]
+        total = round(sum(savings), 2)
         logging.info(f"Инвесткопилка за {month} с лимитом {limit}: {total}")
         return json.dumps({"invested": total}, ensure_ascii=False)
     except Exception as e:
         logging.error(f"Ошибка расчета инвесткопилки: {e}")
-        return json.dumps({"invested": 0})
+        return json.dumps({"invested": 0.0}, ensure_ascii=False)

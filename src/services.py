@@ -1,67 +1,81 @@
 import json
 import datetime
 import logging
-from typing import List, Dict, Any
+import pandas as pd
+from typing import List, Dict, Any, Optional, Union
+from pathlib import Path
 
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
 
 
-def cashback_categories_analysis(
-        data: List[Dict[str, Any]], year: int, month: int
-) -> str:
-    """
-    Анализирует, сколько кешбэка можно получить по каждой категории
-    за указанный месяц и год.
-    """
+def load_transactions() -> List[Dict[str, Any]]:
+    """Загружает транзакции из Excel-файла."""
     try:
-        result: Dict[str, float] = {}  # Явная аннотация типа
+        operations_path: Path = Path(__file__).parent.parent / 'operations.xlsx'
+        df: pd.DataFrame = pd.read_excel(operations_path)
+        return [dict((str(k), v) for k, v in item.items()) for item in df.to_dict('records')]
+    except Exception as e:
+        logging.error(f"Ошибка загрузки транзакций: {e}")
+        return []
+
+
+def cashback_categories_analysis(
+    data: List[Dict[str, Any]],
+    year: int,
+    month: int
+) -> str:
+    """Считает кешбэк по категориям за указанный месяц."""
+    try:
+        result: Dict[str, float] = {}
         for tx in data:
             try:
-                dt = datetime.datetime.strptime(tx['Дата операции'], '%Y-%m-%d')
-            except (ValueError, KeyError):
-                logging.warning(f"Пропущена транзакция с некорректной датой: {tx}")
-                continue
-            if dt.year == year and dt.month == month:
-                category = tx.get('Категория', 'Неизвестно')
-                amount = tx.get('Сумма операции', 0)
-                cashback = abs(amount) * 0.01
-                result[category] = result.get(category, 0) + cashback
+                dt_str: str = tx.get('Дата операции', '')
+                dt: Optional[datetime.datetime] = (
+                    datetime.datetime.strptime(dt_str, '%Y-%m-%d')
+                    if dt_str
+                    else None
+                )
+                if not dt or dt.year != year or dt.month != month:
+                    continue
 
-        # Округляем до целых рублей
+                category: str = tx.get('Категория', 'Неизвестно')
+                amount: Union[float, int, str] = tx.get('Сумма операции', 0)
+                cashback: float = abs(float(amount)) * 0.01
+                result[category] = result.get(category, 0.0) + cashback
+            except Exception as inner_e:
+                logging.warning(f"Ошибка обработки транзакции {tx}: {inner_e}")
+
         result_rounded: Dict[str, int] = {k: round(v) for k, v in result.items()}
-        logging.info(f"Кешбэк по категориям за {year}-{month:02}: {result_rounded}")
         return json.dumps(result_rounded, ensure_ascii=False)
     except Exception as e:
         logging.error(f"Ошибка анализа категорий кешбэка: {e}")
         return json.dumps({})
 
 
-def investment_bank(
-    month: str, transactions: List[Dict[str, Any]], limit: int
-) -> str:
-    """
-    Рассчитывает сумму, которую можно было бы накопить в "Инвесткопилке"
-    за указанный месяц при заданном лимите округления.
-    """
+def investment_bank(month: str, limit: int) -> str:
+    """Считает накопления для инвесткопилки за указанный месяц."""
+    transactions: List[Dict[str, Any]] = load_transactions()
     try:
         if limit <= 0:
-            logging.warning("Предел округления должен быть положительным числом.")
             return json.dumps({"invested": 0.0}, ensure_ascii=False)
 
         def round_up(amount: float, limit: int) -> float:
-            # Округляет отрицательную сумму расходов вверх до ближайшего лимита
-            remainder = (-amount) % limit
-            to_add = limit - remainder if remainder != 0 else 0
-            return to_add
+            """Округляет сумму расходов до ближайшего лимита."""
+            remainder: float = (-amount) % limit
+            return limit - remainder if remainder != 0 else 0
 
-        filtered = [
+        filtered: List[Dict[str, Any]] = [
             tx for tx in transactions
-            if tx.get('Дата операции', '').startswith(month) and tx.get('Сумма операции', 0) < 0
+            if (tx.get('Дата операции', '').startswith(month)
+                and isinstance(tx.get('Сумма операции'), (int, float))
+                and tx['Сумма операции'] < 0)
         ]
 
-        savings = [round_up(tx['Сумма операции'], limit) for tx in filtered]
-        total = round(sum(savings), 2)
-        logging.info(f"Инвесткопилка за {month} с лимитом {limit}: {total}")
+        savings: List[float] = [
+            round_up(float(tx['Сумма операции']), limit)
+            for tx in filtered
+        ]
+        total: float = round(sum(savings), 2)
         return json.dumps({"invested": total}, ensure_ascii=False)
     except Exception as e:
         logging.error(f"Ошибка расчета инвесткопилки: {e}")

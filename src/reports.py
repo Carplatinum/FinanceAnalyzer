@@ -1,8 +1,7 @@
 import json
 import logging
-from datetime import datetime
-from typing import Dict
 import pandas as pd
+from datetime import datetime
 
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
 
@@ -12,7 +11,7 @@ def weekly_expenses_report(df: pd.DataFrame, report_date: datetime = datetime.no
     try:
         df = df.copy()
         df['Дата операции'] = pd.to_datetime(df['Дата операции'], errors='coerce')
-        filtered = df[df['Дата операции'].dt.date == report_date.date()]
+        filtered = df[df['Дата операции'].dt.date == report_date.date()].copy()
 
         if filtered.empty:
             return json.dumps({}, ensure_ascii=False)

@@ -9,8 +9,17 @@ logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(
 
 def main_page(date_time_str: str) -> Dict[str, Any]:
     """
-    Главная функция для страницы, возвращающая JSON-ответ с данными о транзакциях,
-    курсах валют и ценах на акции.
+    Обрабатывает запрос для главной страницы и возвращает данные в формате JSON.
+
+    Принимает дату и время для фильтрации транзакций с начала месяца до указанной даты,
+    учитывает только расходы (сумма операции < 0), получает курсы валют и цены акций,
+    формирует приветствие по текущему времени.
+
+    Args:
+        date_time_str (str): Дата и время в формате 'YYYY-MM-DD HH:MM:SS'.
+
+    Returns:
+        Dict[str, Any]: Данные для главной страницы или словарь с ошибкой.
     """
     try:
         date_time = datetime.datetime.strptime(date_time_str, '%Y-%m-%d %H:%M:%S')
@@ -21,11 +30,14 @@ def main_page(date_time_str: str) -> Dict[str, Any]:
     start_date = date_time.replace(day=1, hour=0, minute=0, second=0, microsecond=0)
     end_date = date_time
 
-    # Загрузка данных из Excel
     try:
         df = pd.read_excel(r'C:\\Users\\ANTAQ\\Desktop\\PythonProjects\\PyCharmProjects\\FA\\operations.xlsx')
         df['Дата операции'] = pd.to_datetime(df['Дата операции'], errors='coerce')
         df = df[(df['Дата операции'] >= start_date) & (df['Дата операции'] <= end_date)]
+
+        # Учитываем только расходы (сумма операции < 0)
+        df = df[df['Сумма операции'] < 0]
+
     except FileNotFoundError:
         logging.error("Файл operations.xlsx не найден.")
         return {"error": "Файл operations.xlsx не найден."}
@@ -33,21 +45,17 @@ def main_page(date_time_str: str) -> Dict[str, Any]:
         logging.error(f"Ошибка при чтении файла Excel: {e}")
         return {"error": f"Ошибка при чтении файла Excel: {str(e)}"}
 
-    # Загрузка пользовательских настроек
     user_settings = load_user_settings('user_settings.json')
     user_currencies = user_settings.get('user_currencies', [])
     user_stocks = user_settings.get('user_stocks', [])
 
-    # Получение данных с API
     currency_rates = get_currency_rates(user_currencies)
     stock_prices = get_stock_prices(user_stocks)
 
-    # Анализ транзакций
     transaction_analysis = analyze_transactions(df)
 
-    # Формирование JSON-ответа
-    response_data: Dict[str, Any] = {
-        "greeting": get_greeting(date_time_str),
+    response_data = {
+        "greeting": get_greeting(datetime.datetime.now()),
         "cards": transaction_analysis["cards"],
         "top_transactions": transaction_analysis["top_transactions"],
         "currency_rates": currency_rates,

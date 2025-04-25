@@ -16,6 +16,7 @@ dependencies = [
     "flake8 (>=7.2.0,<8.0.0)",
     "mypy (>=1.15.0,<2.0.0)",
     "pytest (>=8.3.5,<9.0.0)"
+    "openpyxl
 ]
 
 [build-system]

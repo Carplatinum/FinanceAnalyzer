@@ -10,16 +10,6 @@ logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(
 def main_page(date_time_str: str) -> Dict[str, Any]:
     """
     Обрабатывает запрос для главной страницы и возвращает данные в формате JSON.
-
-    Принимает дату и время для фильтрации транзакций с начала месяца до указанной даты,
-    учитывает только расходы (сумма операции < 0), получает курсы валют и цены акций,
-    формирует приветствие по текущему времени.
-
-    Args:
-        date_time_str (str): Дата и время в формате 'YYYY-MM-DD HH:MM:SS'.
-
-    Returns:
-        Dict[str, Any]: Данные для главной страницы или словарь с ошибкой.
     """
     try:
         date_time = datetime.datetime.strptime(date_time_str, '%Y-%m-%d %H:%M:%S')

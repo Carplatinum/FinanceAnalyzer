@@ -1,16 +1,18 @@
-import pytest
-import pandas as pd
 from datetime import datetime
-from unittest.mock import patch, mock_open
-from src.utils import (
-    load_user_settings,
-    get_currency_rates,
-    get_stock_prices,
-    get_greeting,
-    analyze_transactions,
-)
+from typing import Any, Dict, List
+from unittest.mock import mock_open, patch
+
+import pandas as pd
+import pytest
 import requests
-from typing import Dict, List, Any
+
+from src.utils import (
+    analyze_transactions,
+    get_currency_rates,
+    get_greeting,
+    get_stock_prices,
+    load_user_settings,
+)
 
 
 @pytest.fixture
@@ -23,7 +25,7 @@ def sample_df() -> pd.DataFrame:
             datetime(2021, 12, 25),
         ],
         'Номер карты': ['*7197', '*5091', '*7197'],
-        'Сумма платежа': [-100.0, -200.0, -300.0],
+        'Сумма операции': [-100.0, -200.0, -300.0],
         'Категория': ['Фастфуд', 'Каршеринг', 'Фастфуд'],
         'Описание': ['McDonalds', 'Ситидрайв', 'KFC']
     }

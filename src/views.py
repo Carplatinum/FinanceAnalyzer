@@ -1,16 +1,16 @@
 import datetime
 import logging
+from pathlib import Path
+from typing import Any, Dict
+
 import pandas as pd
-from typing import Dict, Any
-from .utils import load_user_settings, get_currency_rates, get_stock_prices, get_greeting, analyze_transactions
+
+from .utils import analyze_transactions, get_currency_rates, get_greeting, get_stock_prices, load_user_settings
 
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
 
 
 def main_page(date_time_str: str) -> Dict[str, Any]:
-    """
-    Обрабатывает запрос для главной страницы и возвращает данные в формате JSON.
-    """
     try:
         date_time = datetime.datetime.strptime(date_time_str, '%Y-%m-%d %H:%M:%S')
     except ValueError:
@@ -21,7 +21,8 @@ def main_page(date_time_str: str) -> Dict[str, Any]:
     end_date = date_time
 
     try:
-        df = pd.read_excel(r'C:\\Users\\ANTAQ\\Desktop\\PythonProjects\\PyCharmProjects\\FA\\operations.xlsx')
+        data_file = Path(__file__).parent.parent / 'data' / 'operations.xlsx'
+        df = pd.read_excel(data_file)
         df['Дата операции'] = pd.to_datetime(df['Дата операции'], errors='coerce')
         df = df[(df['Дата операции'] >= start_date) & (df['Дата операции'] <= end_date)]
 
@@ -29,8 +30,8 @@ def main_page(date_time_str: str) -> Dict[str, Any]:
         df = df[df['Сумма операции'] < 0]
 
     except FileNotFoundError:
-        logging.error("Файл operations.xlsx не найден.")
-        return {"error": "Файл operations.xlsx не найден."}
+        logging.error(f"Файл {data_file} не найден.")
+        return {"error": f"Файл {data_file} не найден."}
     except Exception as e:
         logging.error(f"Ошибка при чтении файла Excel: {e}")
         return {"error": f"Ошибка при чтении файла Excel: {str(e)}"}
@@ -46,8 +47,8 @@ def main_page(date_time_str: str) -> Dict[str, Any]:
 
     response_data = {
         "greeting": get_greeting(datetime.datetime.now()),
-        "cards": transaction_analysis["cards"],
-        "top_transactions": transaction_analysis["top_transactions"],
+        "cards": transaction_analysis.get("cards", []),
+        "top_transactions": transaction_analysis.get("top_transactions", []),
         "currency_rates": currency_rates,
         "stock_prices": stock_prices
     }

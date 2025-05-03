@@ -1,84 +1,66 @@
 import datetime
-import pandas as pd
+import logging
+from pathlib import Path
 from typing import Any, Dict, List
-from pprint import pprint
 
-from views import main_page
-from services import load_transactions, cashback_categories_analysis, investment_bank
-from reports import weekly_expenses_report
-from utils import (
-    load_user_settings,
-    get_currency_rates,
-    get_stock_prices,
-    get_greeting,
-    analyze_transactions,
-)
+import pandas as pd
+
+from .utils import analyze_transactions, get_currency_rates, get_greeting, get_stock_prices, load_user_settings
+
+logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
 
 
-def main() -> None:
+def main_page(date_time_str: str) -> Dict[str, Any]:
     """
-    Главная функция запуска, которая выполняет вызовы всех основных функций
-    из модулей и выводит результаты.
+    Формирует данные для главной страницы приложения.
+
+    Args:
+        date_time_str: Строка с датой и временем в формате 'YYYY-MM-DD HH:MM:SS'.
+
+    Returns:
+        Словарь с данными для отображения на главной странице или с ошибкой.
     """
-    date_time_str: str = "2025-04-23 10:00:00"
-    month_str: str = "2025-04"
-    limit: int = 100
-
-    print("=== Вызов из views.py: main_page ===")
-    main_page_result: Dict[str, Any] = main_page(date_time_str)
-    pprint(main_page_result)
-
-    print("\n=== Вызов из services.py: load_transactions ===")
-    transactions: List[Dict[str, Any]] = load_transactions()
-    print(f"Загружено транзакций: {len(transactions)}")
-
-    print("\n=== Вызов из services.py: cashback_categories_analysis ===")
-    cashback_json: str = cashback_categories_analysis(transactions, year=2025, month=4)
-    print(cashback_json)
-
-    print("\n=== Вызов из services.py: investment_bank ===")
-    investment_json: str = investment_bank(month_str, limit)
-    print(investment_json)
-
-    print("\n=== Вызов из reports.py: weekly_expenses_report ===")
     try:
-        df: pd.DataFrame = pd.read_excel(r'C:\Users\ANTAQ\Desktop\PythonProjects\PyCharmProjects\FA\operations.xlsx')
+        date_time: datetime.datetime = datetime.datetime.strptime(date_time_str, '%Y-%m-%d %H:%M:%S')
+    except ValueError:
+        logging.error("Неверный формат даты и времени.")
+        return {"error": "Неверный формат даты и времени. Используйте YYYY-MM-DD HH:MM:SS"}
+
+    start_date: datetime.datetime = date_time.replace(day=1, hour=0, minute=0, second=0, microsecond=0)
+    end_date: datetime.datetime = date_time
+
+    try:
+        # Относительный путь к файлу operations.xlsx в папке data корня проекта
+        data_file = Path(__file__).parent.parent / 'data' / 'operations.xlsx'
+        df: pd.DataFrame = pd.read_excel(data_file)
+        df['Дата операции'] = pd.to_datetime(df['Дата операции'], errors='coerce')
+        df = df[(df['Дата операции'] >= start_date) & (df['Дата операции'] <= end_date)]
+
+        # Учитываем только расходы (сумма операции < 0)
+        df = df[df['Сумма операции'] < 0]
+
+    except FileNotFoundError:
+        logging.error(f"Файл {data_file} не найден.")
+        return {"error": f"Файл {data_file} не найден."}
     except Exception as e:
-        print(f"Не удалось загрузить данные для отчёта: {e}")
-        df = pd.DataFrame()
+        logging.error(f"Ошибка при чтении файла Excel: {e}")
+        return {"error": f"Ошибка при чтении файла Excel: {str(e)}"}
 
-    report_date: datetime.datetime = datetime.datetime.strptime(date_time_str, '%Y-%m-%d %H:%M:%S')
-    report_json: str = weekly_expenses_report(df, report_date)
-    print(report_json)
-
-    print("\n=== Вызов из utils.py: load_user_settings ===")
     user_settings: Dict[str, List[str]] = load_user_settings('user_settings.json')
-    pprint(user_settings)
-
-    print("\n=== Вызов из utils.py: get_currency_rates ===")
     user_currencies: List[str] = user_settings.get('user_currencies', [])
-    currency_rates: List[Dict[str, Any]] = get_currency_rates(user_currencies)
-    pprint(currency_rates)
-
-    print("\n=== Вызов из utils.py: get_stock_prices ===")
     user_stocks: List[str] = user_settings.get('user_stocks', [])
-    stock_prices: List[Dict[str, Any]] = get_stock_prices(user_stocks)
-    pprint(stock_prices)
 
-    print("\n=== Вызов из utils.py: get_greeting ===")
-    greeting: str = get_greeting(date_time_str)
-    print(greeting)
+    currency_rates = get_currency_rates(user_currencies)
+    stock_prices = get_stock_prices(user_stocks)
 
-    print("\n=== Вызов из utils.py: analyze_transactions ===")
-    try:
-        df_analysis: pd.DataFrame = pd.read_excel(r'C:\Users\ANTAQ\Desktop\PythonProjects\PyCharmProjects\FA\operations.xlsx')
-    except Exception as e:
-        print(f"Не удалось загрузить данные для анализа транзакций: {e}")
-        df_analysis = pd.DataFrame()
+    transaction_analysis = analyze_transactions(df)
 
-    analysis_result: Dict[str, List[Dict[str, Any]]] = analyze_transactions(df_analysis)
-    pprint(analysis_result)
+    response_data: Dict[str, Any] = {
+        "greeting": get_greeting(datetime.datetime.now()),
+        "cards": transaction_analysis["cards"],
+        "top_transactions": transaction_analysis["top_transactions"],
+        "currency_rates": currency_rates,
+        "stock_prices": stock_prices
+    }
 
-
-if __name__ == "__main__":
-    main()
+    return response_data
